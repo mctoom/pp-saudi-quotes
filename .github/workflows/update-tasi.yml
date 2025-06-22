@@ -1,13 +1,14 @@
-name: Update TASI JSON
+name: Update TASI JSON hourly
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Every hour on the hour (UTC)
+    - cron: '0 * * * *'  # every hour
   workflow_dispatch:
 
 jobs:
   update-tasi:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -17,21 +18,37 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Run update script
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch TASI price from Tadawul and update JSON
         run: |
-          echo '{
-            "quote": {
-              "TASI": {
-                "price": 11850.00,
-                "date": "'"$(date +%F)"'"
+          python <<EOF
+          import requests, json
+          from datetime import date
+
+          url = "https://www.saudiexchange.sa/sym/ajax/GetSecurityQuote/?symbol=TASI"
+          response = requests.get(url)
+          data_raw = response.json()
+          price = float(data_raw["last"].replace(",", ""))
+
+          data = {
+              "quote": {
+                  "TASI": {
+                      "price": round(price, 2),
+                      "date": date.today().isoformat()
+                  }
               }
-            }
-          }' > tasi.json
+          }
+
+          with open("tasi.json", "w") as f:
+              json.dump(data, f, indent=2)
+          EOF
 
       - name: Commit and push changes
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add tasi.json
-          git commit -m "Update TASI data for $(date +%F)" || echo "No changes"
+          git commit -m "Update TASI from Tadawul $(date +%F)" || echo "No changes"
           git push
