@@ -1,71 +1,67 @@
-name: Update MIS and Al Rajhi Prices
+name: Update Saudi Stock Prices
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Every hour
-  workflow_dispatch:
+    - cron: '0 * * * *'   # every hour on the hour (UTC)
+  workflow_dispatch:       # you can also run manually from the Actions tab
 
 jobs:
-  update-saudi-prices:
+  update-prices:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    # 1. Checkout this repo
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
+    # 2. Set up Python
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
 
-      - name: Install dependencies
-        run: pip install requests
+    # 3. Install 'requests'
+    - name: Install dependencies
+      run: pip install requests
 
-      - name: Fetch MIS and Al Rajhi prices and update JSON
-        run: |
-          python <<EOF
-          import requests, json
-          from datetime import datetime
+    # 4. Build tasi.json from every symbol in symbols.txt
+    - name: Fetch prices and build JSON
+      run: |
+        python <<'PY'
+        import requests, json, sys, time, os
+        from datetime import datetime
 
-          headers = {
-              "User-Agent": "Mozilla/5.0"
-          }
+        HEADERS = {"User-Agent": "Mozilla/5.0"}
 
-          symbols = {
-              "7201.SR": "MIS",
-              "1120.SR": "Al Rajhi"
-          }
+        symbols_path = "symbols.txt"
+        if not os.path.exists(symbols_path):
+            sys.exit("symbols.txt not found in repo")
 
-          result = { "quote": {} }
+        symbols = [s.strip() for s in open(symbols_path) if s.strip()]
+        result  = {"quote": {}}
 
-          for symbol in symbols:
-              url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d"
-              response = requests.get(url, headers=headers)
-              data = response.json()
+        for sym in symbols:
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d"
+            try:
+                r = requests.get(url, headers=HEADERS, timeout=15)
+                data = r.json()["chart"]["result"][0]
+                close_price = data["indicators"]["quote"][0]["close"][-1]
+                ts          = data["timestamp"][-1]
+                price       = round(close_price, 2)
+                date_str    = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+                result["quote"][sym] = {"price": price, "date": date_str}
+            except Exception as e:
+                print(f"⚠️  Skipped {sym}: {e}")
 
-              try:
-                  timestamps = data["chart"]["result"][0]["timestamp"]
-                  prices = data["chart"]["result"][0]["indicators"]["quote"][0]["close"]
+        with open("tasi.json", "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+        PY
 
-                  latest_price = round(prices[-1], 2)
-                  latest_date = datetime.utcfromtimestamp(timestamps[-1]).strftime('%Y-%m-%d')
-
-                  result["quote"][symbol] = {
-                      "price": latest_price,
-                      "date": latest_date
-                  }
-              except:
-                  print(f"❌ Failed to fetch or parse {symbol}")
-                  continue
-
-          with open("tasi.json", "w") as f:
-              json.dump(result, f, indent=2)
-          EOF
-
-      - name: Commit and push changes
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add tasi.json
-          git commit -m "Update MIS and Al Rajhi $(date +%F)" || echo "No changes"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+    # 5. Commit & push (needs repo-level write permission enabled)
+    - name: Commit and push changes
+      run: |
+        git config user.name  "GitHub Actions"
+        git config user.email "actions@github.com"
+        git add tasi.json
+        git commit -m "Auto-update Saudi prices $(date +%F %T)" || echo "No changes to commit"
+        git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
