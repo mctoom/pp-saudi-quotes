@@ -1,0 +1,37 @@
+name: Update TASI JSON
+
+on:
+  schedule:
+    - cron: '0 16 * * *'  # Every day at 4 PM UTC
+  workflow_dispatch:
+
+jobs:
+  update-tasi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Run update script
+        run: |
+          echo '{
+            "quote": {
+              "TASI": {
+                "price": 11850.00,
+                "date": "'"$(date +%F)"'"
+              }
+            }
+          }' > tasi.json
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add tasi.json
+          git commit -m "Update TASI data for $(date +%F)" || echo "No changes"
+          git push
