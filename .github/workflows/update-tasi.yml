@@ -27,22 +27,33 @@ jobs:
           import requests, json
           from datetime import date
 
-          url = "https://www.saudiexchange.sa/sym/ajax/GetSecurityQuote/?symbol=TASI"
-          response = requests.get(url)
-          data_raw = response.json()
-          price = float(data_raw["last"].replace(",", ""))
-
-          data = {
-              "quote": {
-                  "TASI": {
-                      "price": round(price, 2),
-                      "date": date.today().isoformat()
-                  }
-              }
+          headers = {
+              "User-Agent": "Mozilla/5.0"
           }
 
-          with open("tasi.json", "w") as f:
-              json.dump(data, f, indent=2)
+          url = "https://www.saudiexchange.sa/sym/ajax/GetSecurityQuote/?symbol=TASI"
+          response = requests.get(url, headers=headers)
+
+          try:
+              data_raw = response.json()
+              price = float(data_raw["last"].replace(",", ""))
+
+              data = {
+                  "quote": {
+                      "TASI": {
+                          "price": round(price, 2),
+                          "date": date.today().isoformat()
+                      }
+                  }
+              }
+
+              with open("tasi.json", "w") as f:
+                  json.dump(data, f, indent=2)
+          except Exception as e:
+              print("❌ Failed to fetch or parse TASI data")
+              print("Response status code:", response.status_code)
+              print("Response text:", response.text[:500])
+              raise e
           EOF
 
       - name: Commit and push changes
