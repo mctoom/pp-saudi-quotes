@@ -1,4 +1,4 @@
-name: Update TASI JSON hourly
+name: Update MIS and Al Rajhi Prices
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  update-tasi:
+  update-saudi-prices:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Fetch TASI price from Yahoo and update JSON
+      - name: Fetch MIS and Al Rajhi prices and update JSON
         run: |
           python <<EOF
           import requests, json
@@ -31,34 +31,35 @@ jobs:
               "User-Agent": "Mozilla/5.0"
           }
 
-          url = "https://query1.finance.yahoo.com/v8/finance/chart/%5ETASI.SR?interval=1d"
-          response = requests.get(url, headers=headers)
+          symbols = {
+              "7201.SR": "MIS",
+              "1120.SR": "Al Rajhi"
+          }
 
-          try:
+          result = { "quote": {} }
+
+          for symbol in symbols:
+              url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d"
+              response = requests.get(url, headers=headers)
               data = response.json()
-              timestamps = data["chart"]["result"][0]["timestamp"]
-              prices = data["chart"]["result"][0]["indicators"]["quote"][0]["close"]
 
-              latest_price = round(prices[-1], 2)
-              latest_date = datetime.utcfromtimestamp(timestamps[-1]).strftime('%Y-%m-%d')
+              try:
+                  timestamps = data["chart"]["result"][0]["timestamp"]
+                  prices = data["chart"]["result"][0]["indicators"]["quote"][0]["close"]
 
-              result = {
-                  "quote": {
-                      "TASI": {
-                          "price": latest_price,
-                          "date": latest_date
-                      }
+                  latest_price = round(prices[-1], 2)
+                  latest_date = datetime.utcfromtimestamp(timestamps[-1]).strftime('%Y-%m-%d')
+
+                  result["quote"][symbol] = {
+                      "price": latest_price,
+                      "date": latest_date
                   }
-              }
+              except:
+                  print(f"❌ Failed to fetch or parse {symbol}")
+                  continue
 
-              with open("tasi.json", "w") as f:
-                  json.dump(result, f, indent=2)
-
-          except Exception as e:
-              print("❌ Failed to fetch or parse TASI from Yahoo")
-              print("Status code:", response.status_code)
-              print("Text:", response.text[:500])
-              raise e
+          with open("tasi.json", "w") as f:
+              json.dump(result, f, indent=2)
           EOF
 
       - name: Commit and push changes
@@ -66,5 +67,5 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add tasi.json
-          git commit -m "Update TASI from Yahoo $(date +%F)" || echo "No changes"
+          git commit -m "Update MIS and Al Rajhi $(date +%F)" || echo "No changes"
           git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
