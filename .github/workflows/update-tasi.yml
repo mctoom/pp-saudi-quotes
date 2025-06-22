@@ -1,59 +1,39 @@
-name: Update TASI JSON hourly
-
-on:
-  schedule:
-    - cron: '0 * * * *'  # every hour
-  workflow_dispatch:
-
-jobs:
-  update-tasi:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-
-      - name: Install dependencies
-        run: pip install requests
-
       - name: Fetch TASI price from Yahoo and update JSON
         run: |
           python <<EOF
           import requests, json
-          from datetime import datetime, date
+          from datetime import datetime
 
-          url = "https://query1.finance.yahoo.com/v8/finance/chart/%5ETASI.SR?interval=1d"
-          response = requests.get(url)
-          data = response.json()
-
-          timestamps = data["chart"]["result"][0]["timestamp"]
-          prices = data["chart"]["result"][0]["indicators"]["quote"][0]["close"]
-
-          latest_price = round(prices[-1], 2)
-          latest_date = datetime.utcfromtimestamp(timestamps[-1]).strftime('%Y-%m-%d')
-
-          result = {
-              "quote": {
-                  "TASI": {
-                      "price": latest_price,
-                      "date": latest_date
-                  }
-              }
+          headers = {
+              "User-Agent": "Mozilla/5.0"
           }
 
-          with open("tasi.json", "w") as f:
-              json.dump(result, f, indent=2)
-          EOF
+          url = "https://query1.finance.yahoo.com/v8/finance/chart/%5ETASI.SR?interval=1d"
+          response = requests.get(url, headers=headers)
 
-      - name: Commit and push changes
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add tasi.json
-          git commit -m "Update TASI from Yahoo $(date +%F)" || echo "No changes"
-          git push
+          try:
+              data = response.json()
+              timestamps = data["chart"]["result"][0]["timestamp"]
+              prices = data["chart"]["result"][0]["indicators"]["quote"][0]["close"]
+
+              latest_price = round(prices[-1], 2)
+              latest_date = datetime.utcfromtimestamp(timestamps[-1]).strftime('%Y-%m-%d')
+
+              result = {
+                  "quote": {
+                      "TASI": {
+                          "price": latest_price,
+                          "date": latest_date
+                      }
+                  }
+              }
+
+              with open("tasi.json", "w") as f:
+                  json.dump(result, f, indent=2)
+
+          except Exception as e:
+              print("❌ Failed to fetch or parse TASI from Yahoo")
+              print("Status code:", response.status_code)
+              print("Text:", response.text[:500])
+              raise e
+          EOF
