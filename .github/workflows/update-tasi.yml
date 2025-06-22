@@ -1,3 +1,26 @@
+name: Update TASI JSON hourly
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Every hour
+  workflow_dispatch:
+
+jobs:
+  update-tasi:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install requests
+
       - name: Fetch TASI price from Yahoo and update JSON
         run: |
           python <<EOF
@@ -37,3 +60,11 @@
               print("Text:", response.text[:500])
               raise e
           EOF
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add tasi.json
+          git commit -m "Update TASI from Yahoo $(date +%F)" || echo "No changes"
+          git push
